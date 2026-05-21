@@ -47,5 +47,12 @@ export function renderContextLine(ctx: RenderContext): string | null {
       break;
   }
 
-  return `${ctxLabel} ${bar} ${valueStr}`;
+  const parts = [`${ctxLabel} ${bar} ${valueStr}`];
+
+  // 上下文接近满时显示压缩警告
+  if (percent >= 90) {
+    parts.push(label('⚠️ 即将压缩', colors));
+  }
+
+  return parts.join(' │ ');
 }
