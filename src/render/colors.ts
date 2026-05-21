@@ -93,10 +93,59 @@ export function critical(text: string, colors?: Record<string, string>): string 
 
 // ---- 上下文进度条颜色 ----
 
+/**
+ * 根据百分比返回平滑渐变的 256 色颜色索引
+ * 在绿色 → 黄色 → 橙色 → 红色之间平滑过渡
+ *
+ * 256 色中 16-231 号是可编程的 RGB 色，我们利用 22-33 号
+ * (绿色到红色经过黄色) 做渐变映射。
+ *
+ * 如果用户配置了自定义颜色则优先使用，否则使用渐变。
+ */
+function gradientColor256(percent: number): string {
+  // 256 色盘中选取的渐变节点 (颜色索引, 百分比)
+  // 22=深绿, 28=绿, 34=黄绿, 70=黄绿, 112=黄绿,
+  // 148=土黄, 184=黄, 220=金黄, 214=橙黄, 208=橙, 202=橙红, 196=红, 160=深红
+  const stops: { pct: number; idx: number }[] = [
+    { pct: 0,   idx: 22  },
+    { pct: 15,  idx: 28  },
+    { pct: 30,  idx: 34  },
+    { pct: 45,  idx: 70  },
+    { pct: 60,  idx: 112 },
+    { pct: 70,  idx: 148 },
+    { pct: 80,  idx: 184 },
+    { pct: 88,  idx: 220 },
+    { pct: 93,  idx: 208 },
+    { pct: 97,  idx: 196 },
+    { pct: 100, idx: 160 },
+  ];
+
+  // 找到当前百分比所在的区间
+  let lower = stops[0];
+  let upper = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (percent >= stops[i].pct && percent <= stops[i + 1].pct) {
+      lower = stops[i];
+      upper = stops[i + 1];
+      break;
+    }
+  }
+
+  // 在区间内线性插值
+  const range = upper.pct - lower.pct;
+  if (range === 0) return `\x1b[38;5;${lower.idx}m`;
+  const t = (percent - lower.pct) / range;
+  const idx = Math.round(lower.idx + (upper.idx - lower.idx) * t);
+  return `\x1b[38;5;${idx}m`;
+}
+
 export function getContextColor(percent: number, colors?: Record<string, string>): string {
-  if (percent >= CONTEXT_CRITICAL_THRESHOLD) return resolveAnsi(colors?.critical, RED);
-  if (percent >= CONTEXT_WARNING_THRESHOLD) return resolveAnsi(colors?.warning, YELLOW);
-  return resolveAnsi(colors?.context, GREEN);
+  // 如果用户自定义了 context 颜色且不是默认值，尊重用户配置
+  if (colors?.context && colors.context !== 'green') {
+    return resolveAnsi(colors.context, GREEN);
+  }
+  // 使用平滑渐变
+  return gradientColor256(percent);
 }
 
 // ---- 使用率进度条颜色 ----
