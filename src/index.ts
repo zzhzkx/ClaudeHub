@@ -4,11 +4,12 @@
 // ClaudeHub - Claude Code HUD 状态栏
 // ============================================================
 
-import { readStdin, getUsageFromStdin } from './stdin.js';
-import { parseTranscriptIncremental } from './transcript.js';
+import { readStdin, getUsageFromStdin, formatDuration, getSessionTokens } from './stdin.js';
+import { parseTranscriptIncremental, parseTranscript } from './transcript.js';
 import { loadConfig } from './config.js';
 import { getGitStatus } from './git.js';
 import { render } from './render/index.js';
+import { statSync } from 'node:fs';
 import type { RenderContext, TranscriptData } from './types.js';
 
 // ---- 缓存 ----
@@ -35,6 +36,12 @@ function getGitCached(cwd?: string) {
   return cachedGit;
 }
 
+function logError(msg: string, err: unknown): void {
+  // 输出到 stderr，不影响 stdout 的 HUD 渲染
+  const detail = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`[claudehub] ${msg}: ${detail}\n`);
+}
+
 async function main(): Promise<void> {
   try {
     const stdin = await readStdin();
@@ -45,24 +52,21 @@ async function main(): Promise<void> {
 
     // 增量解析 transcript：只读新增内容，大幅减少 I/O
     const forceFull = now - lastFullParse > TRANSCRIPT_FULL_INTERVAL;
+    const transcriptPath = stdin.transcript_path ?? '';
+
     if (forceFull) {
       // 强制全量（兜底，防止增量累积误差）
-      const { parseTranscript } = await import('./transcript.js');
-      cachedTranscript = parseTranscript(stdin.transcript_path ?? '');
+      cachedTranscript = parseTranscript(transcriptPath);
       try {
-        const { statSync } = require('node:fs');
-        transcriptLastSize = statSync(stdin.transcript_path ?? '').size;
+        transcriptLastSize = statSync(transcriptPath).size;
       } catch { transcriptLastSize = 0; }
       lastFullParse = now;
     } else {
       // 增量解析
-      const result = parseTranscriptIncremental(
-        stdin.transcript_path ?? '',
-        transcriptLastSize
-      );
+      const result = parseTranscriptIncremental(transcriptPath, transcriptLastSize);
       transcriptLastSize = result.newSize;
       // 合并增量结果到缓存
-      if (result.data.tools.length > 0) {
+      if (result.data.tools.length > 0 || result.data.agents.length > 0 || result.data.todos.length > 0) {
         cachedTranscript = { ...(cachedTranscript ?? { tools: [], agents: [], todos: [] }), ...result.data };
       }
       if (!cachedTranscript) {
@@ -78,10 +82,16 @@ async function main(): Promise<void> {
       ? getUsageFromStdin(stdin)
       : null;
 
+    // 计算会话时长
+    const sessionStart = cachedTranscript?.sessionStart;
+    const sessionDuration = sessionStart
+      ? formatDuration(Date.now() - sessionStart.getTime())
+      : '';
+
     const ctx: RenderContext = {
       stdin,
       transcript: cachedTranscript!,
-      sessionDuration: '',
+      sessionDuration,
       usageData,
       memoryUsage: null,
       config,
@@ -90,8 +100,8 @@ async function main(): Promise<void> {
     };
 
     render(ctx);
-  } catch {
-    // 静默失败
+  } catch (err) {
+    logError('render failed', err);
   }
 }
 

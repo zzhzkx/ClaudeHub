@@ -9,6 +9,7 @@ import { renderUsageLine } from './lines/usage.js';
 import { renderToolsLine } from './lines/tools-line.js';
 import { renderAgentsLine } from './lines/agents-line.js';
 import { renderTodosLine } from './lines/todos-line.js';
+import { renderSessionTokensLine } from './lines/session-tokens-line.js';
 
 /**
  * 渲染完整的 HUD 输出
@@ -62,6 +63,10 @@ export function render(ctx: RenderContext): string {
     // 第 5 行（可选）：待办进度
     const todosLine = renderTodosLine(ctx);
     if (todosLine) lines.push(todosLine);
+
+    // 第 6 行（可选）：Session Token 用量
+    const sessionTokensLine = renderSessionTokensLine(ctx);
+    if (sessionTokensLine) lines.push(sessionTokensLine);
   }
 
   const output = lines.join('\n');

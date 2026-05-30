@@ -2,7 +2,7 @@
 // ClaudeHub - Transcript 解析（增量读取优化）
 // ============================================================
 
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import type { TranscriptData, ToolEntry, AgentEntry, TodoItem } from './types.js';
 
 /** 解析单行 JSON，失败返回 null */
@@ -42,7 +42,6 @@ export function parseTranscriptIncremental(
 
   // 只读取新增的字节
   try {
-    const { openSync, readSync, closeSync } = require('node:fs');
     const fd = openSync(transcriptPath, 'r');
     const buf = Buffer.alloc(newSize - lastSize);
     readSync(fd, buf, 0, buf.length, lastSize);
@@ -66,6 +65,10 @@ export function parseTranscriptIncremental(
       }
       if (type === 'session' && entry.name) {
         result.sessionName = entry.name;
+      }
+      // 如果没有 session 条目，用第一条用户消息时间作为会话开始
+      if (!result.sessionStart && type === 'user' && entry.timestamp) {
+        result.sessionStart = new Date(entry.timestamp);
       }
       if (type === 'tool_use' && entry.tool_use) {
         const tu = entry.tool_use;
@@ -156,6 +159,10 @@ function parseTranscriptFull(transcriptPath: string): TranscriptData {
     }
     if (type === 'session' && entry.name) {
       result.sessionName = entry.name;
+    }
+    // 如果没有 session 条目，用第一条用户消息时间作为会话开始
+    if (!result.sessionStart && type === 'user' && entry.timestamp) {
+      result.sessionStart = new Date(entry.timestamp);
     }
     if (type === 'tool_use' && entry.tool_use) {
       const tu = entry.tool_use;

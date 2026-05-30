@@ -17,9 +17,10 @@
     "showTodos": false,
     "showUsage": true,
     "usageBarEnabled": true,
-    "showDuration": false,
+    "showDuration": true,
     "showCost": false,
-    "showMemoryUsage": false
+    "showMemoryUsage": false,
+    "showSessionTokens": true
   },
   "colors": {
     "context": "green",
